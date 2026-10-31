@@ -51,13 +51,24 @@ fn the_gif_rebuilds_every_frame_exactly_at_twice_the_size() {
 }
 
 #[test]
-fn frames_store_only_the_box_around_the_koi() {
-    let mut gif_decoder = gif::DecodeOptions::new()
-        .read_info(encoded_feeding_excerpt().1.as_slice())
-        .unwrap();
-    while let Some(gif_frame) = gif_decoder.read_next_frame().unwrap() {
-        assert!(u32::from(gif_frame.width) < STATIC_WIDTH_PIXELS);
-        assert!(u32::from(gif_frame.height) < STATIC_HEIGHT_PIXELS);
+fn every_frame_draws_its_whole_picture_on_a_cleared_canvas() {
+    let (koi_frames, gif_bytes) = encoded_feeding_excerpt();
+    let mut gif_options = gif::DecodeOptions::new();
+    gif_options.set_color_output(gif::ColorOutput::Indexed);
+    let mut gif_decoder = gif_options.read_info(gif_bytes.as_slice()).unwrap();
+    for koi_frame in koi_frames {
+        let gif_frame = gif_decoder.read_next_frame().unwrap().unwrap();
+        let drawn_count = gif_frame
+            .buffer
+            .iter()
+            .filter(|&&palette_index| Some(palette_index) != gif_frame.transparent)
+            .count();
+        let opaque_count = scale_to_export(koi_frame)
+            .iter()
+            .filter(|pixel_channels| pixel_channels[3] != 0)
+            .count();
+        assert_eq!(drawn_count, opaque_count);
+        assert_eq!(gif_frame.dispose, gif::DisposalMethod::Background);
     }
 }
 

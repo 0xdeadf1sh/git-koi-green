@@ -6,6 +6,12 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A tank around the fish: swaying vines, a toy ship on the left, a skull on the
+  right, a pebble bed, and bubbles rising from the fish's mouth. The fish swims
+  above the pebble bed and grows to a smaller maximum size.
+
 ## [2.0.0] - 2026-10-31
 
 ### Changed

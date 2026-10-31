@@ -1,10 +1,11 @@
-//! A side-view green fish drawn from one sprite, sized by growth, on a transparent canvas.
+//! A side-view green fish drawn from one sprite, sized by growth, in a tank on a clear canvas.
 
 use std::f64::consts::TAU;
 
 use crate::behavior::Behavior;
 use crate::koi::{KoiDevelopment, calculate_growth_fraction};
 use crate::motion::{Course, STILL_POSE, SwimPose, calculate_swim_pose, frame_count};
+use crate::scenery::{GROUND_RESERVE_PIXELS, calculate_sway_phase, paint_bubble, paint_scenery};
 
 /// Width of the native canvas every fish is drawn on, at every growth level.
 pub const FRAME_WIDTH_PIXELS: u32 = 256;
@@ -30,10 +31,20 @@ impl KoiFrame {
     }
 }
 
-/// Render the fish centered in a fixed pose, sized by its contribution total.
+/// Render the fish in a fixed pose in the still tank, sized by its contribution total.
 pub fn render_koi(koi_development: &KoiDevelopment) -> KoiFrame {
     let fish_scale = calculate_fish_scale(koi_development.total_contributions);
-    render_pose(fish_scale, &STILL_POSE, [1.0; 2])
+    let fish_pixels = render_fish_layer(fish_scale, &STILL_POSE, [1.0; 2]);
+    let mut rgba_pixels = compose_over_scenery(&fish_pixels, 0.0);
+    let mouth = locate_mouth(
+        &place_fish(&STILL_POSE, fish_scale, [1.0; 2]),
+        &STILL_POSE,
+        fish_scale,
+    );
+    for (bubble_index, bubble_age) in [10.0, 30.0, 52.0].into_iter().enumerate() {
+        paint_rising_bubble(&mut rgba_pixels, mouth, bubble_index, bubble_age);
+    }
+    KoiFrame { rgba_pixels }
 }
 
 /// Render one frame of a behavior's seamless loop; frame numbers wrap around the loop.
@@ -42,10 +53,37 @@ pub fn render_swim_frame(
     behavior: Behavior,
     frame_index: u32,
 ) -> KoiFrame {
+    const SPAWN_EVERY_FRAMES: u32 = 10;
+    const BUBBLE_LIFE_FRAMES: u32 = 150;
     let fish_scale = calculate_fish_scale(koi_development.total_contributions);
     let swim_pose = calculate_swim_pose(behavior, frame_index);
     let drift_scales = fit_hover_drift(behavior, fish_scale);
-    render_pose(fish_scale, &swim_pose, drift_scales)
+    let fish_pixels = render_fish_layer(fish_scale, &swim_pose, drift_scales);
+    let loop_frame_count = frame_count(behavior);
+    let loop_frame = frame_index % loop_frame_count;
+    let mut rgba_pixels = compose_over_scenery(
+        &fish_pixels,
+        calculate_sway_phase(loop_frame, loop_frame_count),
+    );
+    for spawn_frame in (0..loop_frame_count).step_by(SPAWN_EVERY_FRAMES as usize) {
+        let spawn_pose = calculate_swim_pose(behavior, spawn_frame);
+        let spawn_mouth = locate_mouth(
+            &place_fish(&spawn_pose, fish_scale, drift_scales),
+            &spawn_pose,
+            fish_scale,
+        );
+        let first_age = (loop_frame + loop_frame_count - spawn_frame) % loop_frame_count;
+        // A bubble outlives a loop, so earlier loops' bubbles may still be rising.
+        for bubble_age in (first_age..BUBBLE_LIFE_FRAMES).step_by(loop_frame_count as usize) {
+            paint_rising_bubble(
+                &mut rgba_pixels,
+                spawn_mouth,
+                (spawn_frame / SPAWN_EVERY_FRAMES) as usize,
+                f64::from(bubble_age),
+            );
+        }
+    }
+    KoiFrame { rgba_pixels }
 }
 
 /// The fish, facing left: `.` is clear and digits index [`SPRITE_PALETTE`].
@@ -106,7 +144,7 @@ const SPRITE_ROWS: [&str; 55] = [
     "...............................4.............................................",
     "...............................4.............................................",
 ];
-const SPRITE_PALETTE: [[u8; 4]; 6] = [
+pub(crate) const SPRITE_PALETTE: [[u8; 4]; 6] = [
     [5, 11, 4, 255],
     [30, 71, 28, 255],
     [47, 111, 38, 255],
@@ -143,7 +181,7 @@ const FIT_MARGIN_PIXELS: f64 = 2.5;
 /// Native pixels per sprite cell, from the smallest fish to the largest.
 fn calculate_fish_scale(total_contributions: u64) -> f64 {
     const MIN_FISH_SCALE: f64 = 1.0;
-    const MAX_FISH_SCALE: f64 = 2.4;
+    const MAX_FISH_SCALE: f64 = 2.0;
     interpolate(
         MIN_FISH_SCALE,
         MAX_FISH_SCALE,
@@ -151,9 +189,20 @@ fn calculate_fish_scale(total_contributions: u64) -> f64 {
     )
 }
 
+/// The middle of the water above the pebble bed, where the fish swims around.
+const SWIM_CENTER: [f64; 2] = [
+    FRAME_WIDTH_PIXELS as f64 / 2.0,
+    (FRAME_HEIGHT_PIXELS as f64 - GROUND_RESERVE_PIXELS) / 2.0,
+];
+/// How far the fish may reach from the swim center on each axis.
+const SWIM_REACH: [f64; 2] = [
+    SWIM_CENTER[0] - FIT_MARGIN_PIXELS,
+    SWIM_CENTER[1] - FIT_MARGIN_PIXELS,
+];
+
 /// Where the fish is in one frame and how it faces.
 struct Placement {
-    /// Sprite center, from the frame center, in native pixels.
+    /// Sprite center, from the swim center, in native pixels.
     center: [f64; 2],
     /// Horizontal stretch: one faces left as drawn, negative mirrors it to face right.
     facing_scale: f64,
@@ -184,8 +233,7 @@ fn fit_hover_drift(behavior: Behavior, fish_scale: f64) -> [f64; 2] {
         }
     }
     [0, 1].map(|axis_index| {
-        let room =
-            f64::from(FRAME_WIDTH_PIXELS) / 2.0 - FIT_MARGIN_PIXELS - half_extents[axis_index];
+        let room = SWIM_REACH[axis_index] - half_extents[axis_index];
         if largest_drift[axis_index] == 0.0 {
             1.0
         } else {
@@ -197,13 +245,13 @@ fn fit_hover_drift(behavior: Behavior, fish_scale: f64) -> [f64; 2] {
 /// Lap ellipse radii that fit a full-width fish mid-lap and a narrowed one at the sides.
 fn calculate_lap_radii(fish_scale: f64) -> [f64; 2] {
     let [half_width, half_height] = measure_half_extents(fish_scale);
-    let reach = f64::from(FRAME_WIDTH_PIXELS) / 2.0 - FIT_MARGIN_PIXELS;
-    let radius_x = (reach * reach - half_width * half_width)
+    let [reach_x, reach_y] = SWIM_REACH;
+    let radius_x = (reach_x * reach_x - half_width * half_width)
         .max(0.0)
         .sqrt()
-        .min(reach - half_width * MIN_TURN_WIDTH)
+        .min(reach_x - half_width * MIN_TURN_WIDTH)
         .min(MAX_LAP_RADIUS_PIXELS);
-    let radius_y = (radius_x * LAP_HEIGHT_SHARE).min((reach - half_height).max(0.0));
+    let radius_y = (radius_x * LAP_HEIGHT_SHARE).min((reach_y - half_height).max(0.0));
     [radius_x, radius_y]
 }
 
@@ -269,18 +317,62 @@ fn sample_sprite(column: f64, row: f64) -> [u8; 4] {
         .unwrap_or([0; 4])
 }
 
-fn render_pose(fish_scale: f64, swim_pose: &SwimPose, drift_scales: [f64; 2]) -> KoiFrame {
-    let placement = place_fish(swim_pose, fish_scale, drift_scales);
-    let frame_center = [
-        f64::from(FRAME_WIDTH_PIXELS) / 2.0,
-        f64::from(FRAME_HEIGHT_PIXELS) / 2.0,
+/// Where the mouth is in the frame, in native pixels.
+fn locate_mouth(placement: &Placement, swim_pose: &SwimPose, fish_scale: f64) -> [f64; 2] {
+    let mouth_bend = calculate_column_bend(0.0, swim_pose, placement.tilt);
+    [
+        SWIM_CENTER[0] + placement.center[0]
+            - SPRITE_CENTER[0] * fish_scale * placement.facing_scale,
+        SWIM_CENTER[1]
+            + placement.center[1]
+            + (MOUTH_ROW - SPRITE_CENTER[1] + mouth_bend) * fish_scale,
+    ]
+}
+
+/// The tank with the fish layer drawn over it.
+fn compose_over_scenery(fish_pixels: &[[u8; 4]], sway_phase: f64) -> Vec<[u8; 4]> {
+    let mut rgba_pixels = paint_scenery(sway_phase);
+    for (scene_pixel, &fish_pixel) in rgba_pixels.iter_mut().zip(fish_pixels) {
+        if fish_pixel[3] != 0 {
+            *scene_pixel = fish_pixel;
+        }
+    }
+    rgba_pixels
+}
+
+/// A bubble rising from the mouth with a wobble, growing a little, until it reaches the top.
+fn paint_rising_bubble(
+    rgba_pixels: &mut [[u8; 4]],
+    mouth: [f64; 2],
+    bubble_index: usize,
+    bubble_age: f64,
+) {
+    const RISE_PIXELS_PER_FRAME: f64 = 1.3;
+    const WOBBLE_PIXELS: f64 = 1.5;
+    const RADII: [f64; 3] = [2.5, 1.5, 3.5];
+    let radius = RADII[bubble_index % RADII.len()] * (0.5 + bubble_age / 24.0).min(1.0);
+    let center = [
+        mouth[0] + WOBBLE_PIXELS * (0.3 * bubble_age + bubble_index as f64 * 1.9).sin(),
+        mouth[1] - 3.0 - RISE_PIXELS_PER_FRAME * bubble_age,
     ];
+    if center[1] - radius > 2.0 {
+        paint_bubble(rgba_pixels, center, radius);
+    }
+}
+
+/// The fish alone, outlined, with any feeding extras and depth tint, on a clear canvas.
+fn render_fish_layer(
+    fish_scale: f64,
+    swim_pose: &SwimPose,
+    drift_scales: [f64; 2],
+) -> Vec<[u8; 4]> {
+    let placement = place_fish(swim_pose, fish_scale, drift_scales);
     let mut rgba_pixels = Vec::with_capacity((FRAME_WIDTH_PIXELS * FRAME_HEIGHT_PIXELS) as usize);
     for pixel_y in 0..FRAME_HEIGHT_PIXELS {
         for pixel_x in 0..FRAME_WIDTH_PIXELS {
             let offset = [
-                f64::from(pixel_x) + 0.5 - frame_center[0] - placement.center[0],
-                f64::from(pixel_y) + 0.5 - frame_center[1] - placement.center[1],
+                f64::from(pixel_x) + 0.5 - SWIM_CENTER[0] - placement.center[0],
+                f64::from(pixel_y) + 0.5 - SWIM_CENTER[1] - placement.center[1],
             ];
             let column = offset[0] / (fish_scale * placement.facing_scale) + SPRITE_CENTER[0];
             let row = offset[1] / fish_scale + SPRITE_CENTER[1]
@@ -298,19 +390,11 @@ fn render_pose(fish_scale: f64, swim_pose: &SwimPose, drift_scales: [f64; 2]) ->
         .iter()
         .map(|pixel_channels| pixel_channels[3] != 0)
         .collect();
-    paint_outline(&mut rgba_pixels);
+    paint_outline(&mut rgba_pixels, FRAME_WIDTH_PIXELS as usize);
     if let Some(feeding_phase) = swim_pose.feeding_phase {
-        let mouth_bend = calculate_column_bend(0.0, swim_pose, placement.tilt);
-        let mouth = [
-            frame_center[0] + placement.center[0]
-                - SPRITE_CENTER[0] * fish_scale * placement.facing_scale,
-            frame_center[1]
-                + placement.center[1]
-                + (MOUTH_ROW - SPRITE_CENTER[1] + mouth_bend) * fish_scale,
-        ];
         paint_feeding(
             &mut rgba_pixels,
-            mouth,
+            locate_mouth(&placement, swim_pose, fish_scale),
             [-placement.facing_scale.signum(), 0.0],
             SPRITE_WIDTH as f64 * fish_scale,
             feeding_phase,
@@ -319,7 +403,7 @@ fn render_pose(fish_scale: f64, swim_pose: &SwimPose, drift_scales: [f64; 2]) ->
     if swim_pose.depth > 0.0 {
         paint_depth(&mut rgba_pixels, &fish_pixel_mask, swim_pose.depth);
     }
-    KoiFrame { rgba_pixels }
+    rgba_pixels
 }
 
 /// Ripples spreading from the mouth and pellets drifting into it, shrunk to fit the frame.
@@ -473,9 +557,10 @@ fn paint_depth(rgba_pixels: &mut [[u8; 4]], fish_pixel_mask: &[bool], depth: f64
     }
 }
 
-fn paint_outline(rgba_pixels: &mut [[u8; 4]]) {
+/// Outline every shape in a row-major image of the given width with one dark pixel.
+pub(crate) fn paint_outline(rgba_pixels: &mut [[u8; 4]], frame_width: usize) {
     let original_pixels = rgba_pixels.to_vec();
-    let frame_width = FRAME_WIDTH_PIXELS as usize;
+    let frame_height = rgba_pixels.len() / frame_width;
     for (pixel_index, pixel_channels) in rgba_pixels.iter_mut().enumerate() {
         if original_pixels[pixel_index][3] != 0 {
             continue;
@@ -485,8 +570,7 @@ fn paint_outline(rgba_pixels: &mut [[u8; 4]]) {
         let touches_shape = (pixel_x > 0 && original_pixels[pixel_index - 1][3] != 0)
             || (pixel_x + 1 < frame_width && original_pixels[pixel_index + 1][3] != 0)
             || (pixel_y > 0 && original_pixels[pixel_index - frame_width][3] != 0)
-            || (pixel_y + 1 < FRAME_HEIGHT_PIXELS as usize
-                && original_pixels[pixel_index + frame_width][3] != 0);
+            || (pixel_y + 1 < frame_height && original_pixels[pixel_index + frame_width][3] != 0);
         if touches_shape {
             *pixel_channels = OUTLINE_COLOR;
         }
@@ -538,5 +622,170 @@ mod tests {
                 .count()
         };
         assert!(0 < cleared_cells(0.5) && cleared_cells(0.5) < cleared_cells(1.0));
+    }
+
+    const BEHAVIORS: [Behavior; 5] = [
+        Behavior::Cruise,
+        Behavior::Dart,
+        Behavior::Rest,
+        Behavior::SurfaceFeeding,
+        Behavior::DeepRest,
+    ];
+
+    fn render_swimming_fish(
+        total_contributions: u64,
+        behavior: Behavior,
+        frame: u32,
+    ) -> Vec<[u8; 4]> {
+        let fish_scale = calculate_fish_scale(total_contributions);
+        render_fish_layer(
+            fish_scale,
+            &calculate_swim_pose(behavior, frame),
+            fit_hover_drift(behavior, fish_scale),
+        )
+    }
+
+    /// The `[left, top, right, bottom]` pixels around everything drawn.
+    fn measure_bounds(rgba_pixels: &[[u8; 4]]) -> [usize; 4] {
+        let frame_width = FRAME_WIDTH_PIXELS as usize;
+        let mut bounds = [usize::MAX, usize::MAX, 0, 0];
+        for (pixel_index, _) in rgba_pixels
+            .iter()
+            .enumerate()
+            .filter(|(_, pixel)| pixel[3] != 0)
+        {
+            let [pixel_x, pixel_y] = [pixel_index % frame_width, pixel_index / frame_width];
+            bounds = [
+                bounds[0].min(pixel_x),
+                bounds[1].min(pixel_y),
+                bounds[2].max(pixel_x),
+                bounds[3].max(pixel_y),
+            ];
+        }
+        assert!(bounds[0] < bounds[2] && bounds[1] < bounds[3]);
+        bounds
+    }
+
+    fn measure_centroid(rgba_pixels: &[[u8; 4]]) -> [f64; 2] {
+        let frame_width = FRAME_WIDTH_PIXELS as usize;
+        let drawn: Vec<usize> = (0..rgba_pixels.len())
+            .filter(|&pixel_index| rgba_pixels[pixel_index][3] != 0)
+            .collect();
+        let count = drawn.len() as f64;
+        [
+            drawn
+                .iter()
+                .map(|&pixel_index| (pixel_index % frame_width) as f64)
+                .sum::<f64>()
+                / count,
+            drawn
+                .iter()
+                .map(|&pixel_index| (pixel_index / frame_width) as f64)
+                .sum::<f64>()
+                / count,
+        ]
+    }
+
+    fn is_inside_water(bounds: [usize; 4]) -> bool {
+        let water_bottom = (f64::from(FRAME_HEIGHT_PIXELS) - GROUND_RESERVE_PIXELS) as usize;
+        bounds[0] > 0
+            && bounds[1] > 0
+            && bounds[2] < FRAME_WIDTH_PIXELS as usize - 1
+            && bounds[3] < water_bottom
+    }
+
+    #[test]
+    fn growth_slows_and_keeps_the_fish_in_the_water_above_the_ground() {
+        let widths: Vec<(u64, usize)> = [0, 500, 1_500, 2_000, 12_750, 50_000, 100_000, u64::MAX]
+            .into_iter()
+            .map(|total_contributions| {
+                let fish_pixels = render_fish_layer(
+                    calculate_fish_scale(total_contributions),
+                    &STILL_POSE,
+                    [1.0; 2],
+                );
+                let bounds = measure_bounds(&fish_pixels);
+                assert!(is_inside_water(bounds), "{total_contributions}: {bounds:?}");
+                (total_contributions, bounds[2] - bounds[0])
+            })
+            .collect();
+        assert!(widths.windows(2).all(|pair| pair[0].1 <= pair[1].1));
+        assert!(widths[1].1 - widths[0].1 > widths[3].1 - widths[2].1);
+        assert_eq!(widths[6].1, widths[7].1);
+    }
+
+    #[test]
+    fn swimming_keeps_the_fish_in_the_water_above_the_ground() {
+        for behavior in BEHAVIORS {
+            for total_contributions in [0, 1_500, 12_750, 100_000] {
+                for frame in (0..frame_count(behavior)).step_by(5) {
+                    let bounds =
+                        measure_bounds(&render_swimming_fish(total_contributions, behavior, frame));
+                    assert!(
+                        is_inside_water(bounds),
+                        "{behavior:?} at {total_contributions}, frame {frame}: {bounds:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn lapping_fish_face_the_way_they_swim() {
+        // The deep head outweighs the tail, so the centroid leans toward the head.
+        let head_side = |fish_pixels: &[[u8; 4]]| {
+            let bounds = measure_bounds(fish_pixels);
+            measure_centroid(fish_pixels)[0] - (bounds[0] + bounds[2]) as f64 / 2.0
+        };
+        let half_loop = frame_count(Behavior::Cruise) / 2;
+        assert!(head_side(&render_fish_layer(1.5, &STILL_POSE, [1.0; 2])) < 0.0);
+        assert!(head_side(&render_swimming_fish(12_750, Behavior::Cruise, 0)) > 0.0);
+        assert!(head_side(&render_swimming_fish(12_750, Behavior::Cruise, half_loop)) < 0.0);
+    }
+
+    #[test]
+    fn deeper_rest_turns_the_fish_toward_water_blue() {
+        let blue_lean = |behavior| {
+            let fish_pixels = render_swimming_fish(12_750, behavior, 0);
+            let drawn: Vec<_> = fish_pixels.iter().filter(|pixel| pixel[3] != 0).collect();
+            drawn
+                .iter()
+                .map(|pixel| f64::from(pixel[2]) - f64::from(pixel[1]))
+                .sum::<f64>()
+                / drawn.len() as f64
+        };
+        let [cruise, rest, deep_rest] =
+            [Behavior::Cruise, Behavior::Rest, Behavior::DeepRest].map(blue_lean);
+        assert!(
+            rest > cruise + 10.0 && deep_rest > rest + 10.0,
+            "{cruise} {rest} {deep_rest}"
+        );
+    }
+
+    #[test]
+    fn the_fish_never_jumps_or_vanishes() {
+        for behavior in BEHAVIORS {
+            let frames: Vec<_> = (0..=frame_count(behavior))
+                .map(|frame| render_swimming_fish(1_500, behavior, frame))
+                .collect();
+            // Darting bursts are fast by design; every other behavior moves gently.
+            if behavior != Behavior::Dart {
+                for pair in frames.windows(2) {
+                    let [before, after] =
+                        [&pair[0], &pair[1]].map(|pixels| measure_centroid(pixels));
+                    let step = (after[0] - before[0]).hypot(after[1] - before[1]);
+                    assert!(step < 8.0, "{behavior:?} jumps {step}");
+                }
+            }
+            let counts: Vec<usize> = frames
+                .iter()
+                .map(|pixels| pixels.iter().filter(|pixel| pixel[3] != 0).count())
+                .collect();
+            let largest = *counts.iter().max().unwrap();
+            assert!(
+                counts.iter().all(|&count| count * 8 > largest),
+                "{behavior:?}"
+            );
+        }
     }
 }

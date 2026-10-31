@@ -8,3 +8,4 @@ pub mod koi;
 pub mod motion;
 pub mod output;
 pub mod render;
+mod scenery;

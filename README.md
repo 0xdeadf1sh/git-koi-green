@@ -1,7 +1,9 @@
 # Git koi
 
-Git koi draws a pixel-art green fish from a GitHub account's public activity.
-Its contributions grow it, and the day that just ended decides how it swims. A
+Git koi draws a pixel-art green fish from a GitHub account's public activity, in
+a tank with swaying vines, a toy ship, a skull, and a pebble bed, blowing
+bubbles. Its contributions grow it, and the day that just ended decides how it
+swims. A
 nightly workflow puts the fish on a profile README as a looping GIF, the same
 tool runs from the command line, and the Rust library underneath can be used on
 its own.

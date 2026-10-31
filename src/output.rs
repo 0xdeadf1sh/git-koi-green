@@ -1,10 +1,4 @@
-//! Image and animation encoding; callers own destinations and publication.
-//!
-//! Every export is [`STATIC_EXPORT_SCALE`] times the native canvas on each side, so the
-//! pixel art stays crisp: [`encode_png`] for the still, [`encode_svg`] for a vector
-//! document of the same pixels, [`encode_gif`] for a behavior's loop, and
-//! [`encode_preview_html`] for a page that shows the GIF and PNG beside it on GitHub's
-//! light and dark page colors.
+//! PNG, SVG, GIF, and preview-page encoding at [`STATIC_EXPORT_SCALE`] times the native size.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -21,9 +15,7 @@ pub const STATIC_WIDTH_PIXELS: u32 = FRAME_WIDTH_PIXELS * STATIC_EXPORT_SCALE;
 /// Height of every exported image.
 pub const STATIC_HEIGHT_PIXELS: u32 = FRAME_HEIGHT_PIXELS * STATIC_EXPORT_SCALE;
 
-/// Encode a static PNG by repeating each native pixel in both dimensions.
-/// Preserve its color and alpha without interpolation, timestamps, I/O, or mutation.
-/// Encoding errors propagate before the caller publishes any resulting bytes.
+/// Encode a PNG that repeats each native pixel in both dimensions, colors and alpha exact.
 pub fn encode_png(koi_frame: &KoiFrame) -> Result<Vec<u8>, png::EncodingError> {
     let native_pixels = koi_frame.as_rgba_bytes().as_chunks::<4>().0;
     let mut export_pixels = vec![[0; 4]; (STATIC_WIDTH_PIXELS * STATIC_HEIGHT_PIXELS) as usize];
@@ -43,10 +35,7 @@ pub fn encode_png(koi_frame: &KoiFrame) -> Result<Vec<u8>, png::EncodingError> {
     Ok(png_bytes)
 }
 
-/// Encode a self-contained SVG at the static export size with native pixel coordinates.
-/// Equal neighboring pixels share a rectangle within their row. Transparent pixels
-/// are omitted; visible pixels retain their color and alpha. Identical frames produce
-/// identical documents without I/O, timestamps, external assets, or input mutation.
+/// Encode a self-contained SVG in native pixel coordinates, one rectangle per row run.
 pub fn encode_svg(koi_frame: &KoiFrame) -> String {
     let mut svg_document = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{STATIC_WIDTH_PIXELS}\" height=\"{STATIC_HEIGHT_PIXELS}\" viewBox=\"0 0 {FRAME_WIDTH_PIXELS} {FRAME_HEIGHT_PIXELS}\" shape-rendering=\"crispEdges\">\n"
@@ -114,9 +103,7 @@ const PREVIEW_PANELS: &str = r#"</h1></header>
 </html>
 "#;
 
-/// Build a page that previews `koi.gif` and `koi.png`, read from beside it, on GitHub's
-/// light and dark page colors under the given caption. It draws nothing itself and loads
-/// no scripts or outside files, so it shows exactly what was generated.
+/// A script-free page showing the `koi.gif` and `koi.png` beside it on light and dark.
 pub fn encode_preview_html(caption: &str) -> String {
     let escaped_caption = caption
         .replace('&', "&amp;")
@@ -129,14 +116,7 @@ pub fn encode_preview_html(caption: &str) -> String {
 const GIF_COLOR_LIMIT: usize = 255;
 const GIF_TRANSPARENT_INDEX: u8 = 0;
 
-/// Encode a seamless loop as an animated GIF at the static export size, repeating each
-/// native pixel in both dimensions. The GIF repeats forever at `FRAMES_PER_SECOND`; each
-/// delay, in hundredths of a second, is the step in a rounded running total, so a loop
-/// lasts exactly its frame count divided by the frame rate. Each frame stores only the
-/// box around its drawn pixels, with an exact palette of its colors, and that box clears
-/// before the next frame. Colors are never approximated: a frame with more than 255
-/// colors or a partly transparent pixel fails instead. Identical frames produce
-/// identical bytes without I/O, timestamps, or input mutation.
+/// Encode a forever-looping GIF; each frame stores the box around its pixels, colors exact.
 pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> {
     if koi_frames.is_empty() {
         return Err(GifEncodingError::NoFrames);
@@ -150,7 +130,8 @@ pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> 
     gif_encoder.set_repeat(gif::Repeat::Infinite)?;
     for (frame_index, koi_frame) in koi_frames.iter().enumerate() {
         let native_pixels = koi_frame.as_rgba_bytes().as_chunks::<4>().0;
-        let [box_left, box_top, box_width, box_height] = find_drawn_box(native_pixels);
+        let [box_left, box_top, box_width, box_height] =
+            find_box(|pixel_index| native_pixels[pixel_index][3] != 0);
         let mut palette_indices: BTreeMap<[u8; 3], u8> = BTreeMap::new();
         let mut palette_channels = vec![0; 3];
         let mut native_indices = Vec::with_capacity((box_width * box_height) as usize);
@@ -206,24 +187,23 @@ pub fn encode_gif(koi_frames: &[KoiFrame]) -> Result<Vec<u8>, GifEncodingError> 
     Ok(gif_encoder.into_inner()?)
 }
 
-/// The native box `[left, top, width, height]` around a frame's drawn pixels; a frame
-/// with none keeps one transparent pixel, since a GIF frame cannot be empty.
-fn find_drawn_box(native_pixels: &[[u8; 4]]) -> [u32; 4] {
-    let mut drawn_edges: Option<[u32; 4]> = None;
-    for (pixel_index, pixel_channels) in native_pixels.iter().enumerate() {
-        if pixel_channels[3] == 0 {
+/// The native box `[left, top, width, height]` around the chosen pixels, or one pixel if none.
+fn find_box(is_chosen: impl Fn(usize) -> bool) -> [u32; 4] {
+    let mut chosen_edges: Option<[u32; 4]> = None;
+    for pixel_index in 0..(FRAME_WIDTH_PIXELS * FRAME_HEIGHT_PIXELS) as usize {
+        if !is_chosen(pixel_index) {
             continue;
         }
         let pixel_x = pixel_index as u32 % FRAME_WIDTH_PIXELS;
         let pixel_y = pixel_index as u32 / FRAME_WIDTH_PIXELS;
         let [left, top, right, bottom] =
-            drawn_edges.get_or_insert([pixel_x, pixel_y, pixel_x, pixel_y]);
+            chosen_edges.get_or_insert([pixel_x, pixel_y, pixel_x, pixel_y]);
         *left = (*left).min(pixel_x);
         *top = (*top).min(pixel_y);
         *right = (*right).max(pixel_x);
         *bottom = (*bottom).max(pixel_y);
     }
-    drawn_edges.map_or([0, 0, 1, 1], |[left, top, right, bottom]| {
+    chosen_edges.map_or([0, 0, 1, 1], |[left, top, right, bottom]| {
         [left, top, right + 1 - left, bottom + 1 - top]
     })
 }
@@ -333,7 +313,7 @@ mod tests {
     fn a_frame_may_use_every_palette_color_but_no_more() {
         assert!(encode_gif(&[frame_with_colors(distinct_colors(255))]).is_ok());
         let crowded_frames = [
-            frame_with_colors(distinct_colors(1)),
+            frame_with_colors([[9, 9, 9, 255]]),
             frame_with_colors(distinct_colors(256)),
         ];
         assert!(matches!(
