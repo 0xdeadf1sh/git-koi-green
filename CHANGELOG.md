@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-31
+
 ### Changed
 
 - The tank is wide, 512 × 192 native and 1024 × 384 exported, to fill a profile
@@ -53,7 +55,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `git-koi` library: account history, koi development, behavior, motion,
   markings, rendering, and encoding.
 
-[Unreleased]: https://github.com/0xdeadf1sh/git-koi-green/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/0xdeadf1sh/git-koi-green/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/0xdeadf1sh/git-koi-green/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/0xdeadf1sh/git-koi-green/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/0xdeadf1sh/git-koi-green/releases/tag/v2.0.0
 [1.0.1]: https://github.com/yalongwastaken/git-koi/compare/v1.0.0...v1.0.1
