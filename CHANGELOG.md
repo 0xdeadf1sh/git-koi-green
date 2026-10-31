@@ -6,6 +6,18 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The koi is replaced by a side-view green fish drawn from a fixed sprite. It
+  grows with contributions, laps the frame seen from the side, and faces the
+  way it swims.
+
+### Removed
+
+- Bodies, language colors, and streak marks: the `coat` and `markings` modules,
+  the `koi_body` argument of `render_koi` and `render_swim_frame`, the
+  `--body` option, and the Action's `body` input.
+
 ## [1.0.1] - 2026-10-28
 
 ### Changed

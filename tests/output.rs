@@ -1,7 +1,6 @@
 use std::sync::OnceLock;
 
 use git_koi::behavior::Behavior;
-use git_koi::coat::KoiBody;
 use git_koi::history::AccountSnapshot;
 use git_koi::koi::derive_koi_development;
 use git_koi::output::{GifEncodingError, STATIC_HEIGHT_PIXELS, STATIC_WIDTH_PIXELS, encode_gif};
@@ -90,12 +89,7 @@ fn encoded_feeding_excerpt() -> &'static (Vec<KoiFrame>, Vec<u8>) {
         let koi_development = derive_koi_development(&account_snapshot).unwrap();
         let koi_frames: Vec<KoiFrame> = (0..6)
             .map(|frame_index| {
-                render_swim_frame(
-                    &koi_development,
-                    KoiBody::default(),
-                    Behavior::SurfaceFeeding,
-                    frame_index,
-                )
+                render_swim_frame(&koi_development, Behavior::SurfaceFeeding, frame_index)
             })
             .collect();
         let gif_bytes = encode_gif(&koi_frames).unwrap();

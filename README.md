@@ -1,18 +1,18 @@
 # Git koi
 
-Git koi draws a pixel-art koi from a GitHub account's public activity. Its
-languages color it, its contributions grow it, its streaks mark it, and the day
-that just ended decides how it swims. A nightly workflow puts the koi on a
-profile README as a looping GIF, the same tool runs from the command line, and
-the Rust library underneath is published on crates.io.
+Git koi draws a pixel-art green fish from a GitHub account's public activity.
+Its contributions grow it, and the day that just ended decides how it swims. A
+nightly workflow puts the fish on a profile README as a looping GIF, the same
+tool runs from the command line, and the Rust library underneath is published on
+crates.io.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/yalongwastaken/yalongwastaken/main/koi/koi.gif" width="256" alt="The author's koi, redrawn every night from the day's activity" />
 </p>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/bodies-dark.png" />
-  <img src="docs/bodies-light.png" alt="The six bodies, white, black, Asagi, tea, gold, and platinum, at each growth stage" />
+  <source media="(prefers-color-scheme: dark)" srcset="docs/growth-dark.png" />
+  <img src="docs/growth-light.png" alt="The fish at each growth stage" />
 </picture>
 
 ## Repository Structure

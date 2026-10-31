@@ -48,9 +48,8 @@ npx prettier@3.9.10 --write .
 
 ## Reviewing Rendering Changes
 
-The koi library shows every body across growth samples, language mixes, and
-streak marks, as transparent PNG and SVG pairs plus light and dark comparison
-sheets. Generate it from the repository root, then open `library/README.md`; Git
+The fish library shows the still fish at each growth sample, as transparent PNG
+and SVG pairs plus light and dark comparison sheets. Generate it from the repository root, then open `library/README.md`; Git
 ignores the generated files, and CI attaches a fresh library to every pull
 request as the `koi-library` artifact.
 
@@ -58,8 +57,8 @@ request as the `koi-library` artifact.
 cargo run --locked --example generate-library -- library
 ```
 
-When a change alters how the koi looks, copy `library/bodies-light.png` and
-`library/bodies-dark.png` into `docs/` so the README's sheet matches the code.
+When a change alters how the fish looks, copy `library/growth-light.png` and
+`library/growth-dark.png` into `docs/` so the README's sheet matches the code.
 
 ## Releasing
 

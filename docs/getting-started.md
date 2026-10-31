@@ -32,14 +32,12 @@ when it changed, so an unchanged koi adds no commit.
 
 | Input        | Default              | Meaning                                                   |
 | ------------ | -------------------- | --------------------------------------------------------- |
-| `login`      | The repository owner | Account whose koi to draw                                 |
-| `body`       | `white`              | `white`, `black`, `asagi`, `tea`, `gold`, or `platinum`   |
+| `login`      | The repository owner | Account whose fish to draw                                |
 | `output-dir` | `koi`                | Folder that receives `koi.gif`, `koi.png`, `preview.html` |
 | `token`      | The built-in token   | Token for reading the account's public data               |
 
-To change the body, edit `body` in your copy of the workflow; pushing the change
-runs the workflow and redraws the koi. If you change `output-dir`, change the
-commit step's path and the README image to match. The example uses
+If you change `output-dir`, change the commit step's path and the README image
+to match. The example uses
 `yalongwastaken/git-koi@v1`, which moves to each compatible release; pin a full
 release tag to choose when you update.
 
@@ -70,12 +68,11 @@ and sign in once with `gh auth login`. Then:
 
 ```sh
 git-koi collect octocat --output snapshot.json
-git-koi render snapshot.json --output-dir koi --body asagi
+git-koi render snapshot.json --output-dir koi
 ```
 
 Open `koi/preview.html` in a browser to see the GIF and the still on GitHub's
-light and dark page colors. `--body` takes `white`, the default, `black`,
-`asagi`, `tea`, `gold`, or `platinum`.
+light and dark page colors.
 
 `collect` reads only public data: the account's public repositories, the public
 repositories it has contributed to, GitHub's color for each language, and its
@@ -101,7 +98,6 @@ koi's development, choose the day's behavior, render frames, and encode them:
 
 ```rust
 use git_koi::behavior::select_behavior;
-use git_koi::coat::KoiBody;
 use git_koi::history::AccountSnapshot;
 use git_koi::koi::derive_koi_development;
 use git_koi::motion::frame_count;
@@ -112,13 +108,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let snapshot_json = std::fs::read_to_string("snapshot.json")?;
     let account_snapshot: AccountSnapshot = serde_json::from_str(&snapshot_json)?;
     let koi_development = derive_koi_development(&account_snapshot)?;
-    let koi_body = KoiBody::Asagi;
     let behavior = select_behavior(&koi_development);
     let swim_frames: Vec<_> = (0..frame_count(behavior))
-        .map(|frame_index| render_swim_frame(&koi_development, koi_body, behavior, frame_index))
+        .map(|frame_index| render_swim_frame(&koi_development, behavior, frame_index))
         .collect();
     std::fs::write("koi.gif", encode_gif(&swim_frames)?)?;
-    std::fs::write("koi.png", encode_png(&render_koi(&koi_development, koi_body))?)?;
+    std::fs::write("koi.png", encode_png(&render_koi(&koi_development))?)?;
     Ok(())
 }
 ```

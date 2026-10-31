@@ -4,9 +4,8 @@ use std::process::{Command, Output};
 
 use chrono::Days;
 use git_koi::behavior::{Behavior, select_behavior};
-use git_koi::coat::KoiBody;
 use git_koi::history::{AccountSnapshot, ContributionDay};
-use git_koi::koi::{KoiDevelopment, derive_koi_development};
+use git_koi::koi::derive_koi_development;
 use git_koi::motion::frame_count;
 use git_koi::output::{encode_gif, encode_png};
 use git_koi::render::{KoiFrame, render_koi, render_swim_frame};
@@ -53,9 +52,7 @@ fn render_writes_the_days_loop_still_and_preview_as_the_renderer_draws_them() {
     let behavior = select_behavior(&koi_development);
     assert_eq!(behavior, Behavior::Rest);
     let swim_frames: Vec<KoiFrame> = (0..frame_count(behavior))
-        .map(|frame_index| {
-            render_swim_frame(&koi_development, KoiBody::White, behavior, frame_index)
-        })
+        .map(|frame_index| render_swim_frame(&koi_development, behavior, frame_index))
         .collect();
     assert_eq!(
         fs::read(output_directory.join("koi.gif")).unwrap(),
@@ -63,7 +60,7 @@ fn render_writes_the_days_loop_still_and_preview_as_the_renderer_draws_them() {
     );
     assert_eq!(
         fs::read(output_directory.join("koi.png")).unwrap(),
-        encode_png(&render_koi(&koi_development, KoiBody::White)).unwrap()
+        encode_png(&render_koi(&koi_development)).unwrap()
     );
     let preview_html = fs::read_to_string(output_directory.join("preview.html")).unwrap();
     assert!(preview_html.contains(r#"src="koi.gif""#));
@@ -73,31 +70,6 @@ fn render_writes_the_days_loop_still_and_preview_as_the_renderer_draws_them() {
     let observation_date = koi_development.observed_on.to_string();
     assert!(summary_line.contains(&observation_date));
     assert!(preview_html.contains(&observation_date));
-}
-
-#[test]
-fn the_body_option_redraws_the_koi_in_that_body() {
-    let output_directory = fresh_directory("render-black");
-    let command_output = run_git_koi(&[
-        "render",
-        HISTORY_FIXTURE,
-        "--output-dir",
-        output_directory.to_str().unwrap(),
-        "--body",
-        "black",
-    ]);
-    assert_eq!(command_output.status.code(), Some(0));
-    let koi_development = read_fixture_development();
-    let black_png = encode_png(&render_koi(&koi_development, KoiBody::Black)).unwrap();
-    assert_ne!(
-        black_png,
-        encode_png(&render_koi(&koi_development, KoiBody::White)).unwrap()
-    );
-    assert_eq!(
-        fs::read(output_directory.join("koi.png")).unwrap(),
-        black_png
-    );
-    assert!(String::from_utf8_lossy(&command_output.stdout).contains("black body"));
 }
 
 #[test]
@@ -138,7 +110,7 @@ fn render_usage_errors_exit_two_and_help_exits_zero() {
             "--output-dir",
             "koi",
             "--body",
-            "red",
+            "white",
         ],
     ] {
         let command_output = run_git_koi(invalid_arguments);
@@ -151,7 +123,7 @@ fn render_usage_errors_exit_two_and_help_exits_zero() {
     }
     let help_output = run_git_koi(&["render", "--help"]);
     assert_eq!(help_output.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&help_output.stdout).contains("platinum"));
+    assert!(String::from_utf8_lossy(&help_output.stdout).contains("still fish"));
 }
 
 #[test]
@@ -166,10 +138,6 @@ fn version_prints_the_manifest_version_and_exits_zero() {
 
 fn read_fixture_snapshot() -> AccountSnapshot {
     serde_json::from_str(&fs::read_to_string(HISTORY_FIXTURE).unwrap()).unwrap()
-}
-
-fn read_fixture_development() -> KoiDevelopment {
-    derive_koi_development(&read_fixture_snapshot()).unwrap()
 }
 
 /// An empty directory of the given name under Cargo's scratch space for tests.

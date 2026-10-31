@@ -7,7 +7,6 @@ use std::{env, fs};
 
 use chrono::{DateTime, NaiveDate};
 use git_koi::behavior::{Behavior, select_behavior};
-use git_koi::coat::KoiBody;
 use git_koi::collect::{GhCli, collect_account_snapshot};
 use git_koi::history::AccountSnapshot;
 use git_koi::koi::derive_koi_development;
@@ -16,7 +15,7 @@ use git_koi::output::{encode_gif, encode_png, encode_preview_html};
 use git_koi::render::{KoiFrame, render_koi, render_swim_frame};
 
 const USAGE: &str = "Usage: git-koi collect LOGIN [--output FILE]
-       git-koi render SNAPSHOT --output-dir DIR [--body BODY]
+       git-koi render SNAPSHOT --output-dir DIR
        git-koi --help | --version
 Collect LOGIN's public GitHub snapshot as JSON through `gh api`: public owned and
 contributed repositories, and daily contributions from the account's creation
@@ -24,22 +23,11 @@ through yesterday (UTC), the last complete day.
 Writes to standard output, or replaces FILE only after collection succeeds.
 Requires an authenticated GitHub CLI; in GitHub Actions, set GH_TOKEN to github.token.
 Render a collected SNAPSHOT into DIR: koi.gif swims the behavior chosen for its
-observation date, koi.png is the still koi, and preview.html shows both on light and
-dark backgrounds. BODY is white (the default), black, asagi, tea, gold, or platinum.
-The files are replaced only after all of them render.
+observation date, koi.png is the still fish, and preview.html shows both on light and
+dark backgrounds. The files are replaced only after all of them render.
 Errors go to stderr and exit 1; invalid usage exits 2.
 Examples: git-koi collect octocat --output snapshot.json
-          git-koi render snapshot.json --output-dir koi --body asagi";
-
-/// Each body's name on the command line.
-const BODY_NAMES: [(&str, KoiBody); 6] = [
-    ("white", KoiBody::White),
-    ("black", KoiBody::Black),
-    ("asagi", KoiBody::Asagi),
-    ("tea", KoiBody::Tea),
-    ("gold", KoiBody::Gold),
-    ("platinum", KoiBody::Platinum),
-];
+          git-koi render snapshot.json --output-dir koi";
 
 fn main() -> ExitCode {
     let program_arguments: Vec<OsString> = env::args_os().skip(1).collect();
@@ -63,24 +51,8 @@ fn main() -> ExitCode {
         [Some("render"), Some(snapshot_path), Some("--output-dir"), _]
             if !snapshot_path.starts_with('-') =>
         {
-            run_render(
-                Path::new(snapshot_path),
-                Path::new(&program_arguments[3]),
-                KoiBody::default(),
-            )
+            run_render(Path::new(snapshot_path), Path::new(&program_arguments[3]))
         }
-        [
-            Some("render"),
-            Some(snapshot_path),
-            Some("--output-dir"),
-            _,
-            Some("--body"),
-            Some(body_name),
-        ] if !snapshot_path.starts_with('-') && parse_body(body_name).is_some() => run_render(
-            Path::new(snapshot_path),
-            Path::new(&program_arguments[3]),
-            parse_body(body_name).expect("the guard parsed the body"),
-        ),
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)
@@ -105,8 +77,8 @@ fn run_collect(login: &str, output_path: Option<&Path>) -> ExitCode {
     }
 }
 
-fn run_render(snapshot_path: &Path, output_directory: &Path, koi_body: KoiBody) -> ExitCode {
-    let render_result = render_day(snapshot_path, koi_body).and_then(|rendered_day| {
+fn run_render(snapshot_path: &Path, output_directory: &Path) -> ExitCode {
+    let render_result = render_day(snapshot_path).and_then(|rendered_day| {
         fs::create_dir_all(output_directory)
             .map_err(|create_error| format!("{}: {create_error}", output_directory.display()))?;
         let mut written_paths = Vec::new();
@@ -131,14 +103,14 @@ fn run_render(snapshot_path: &Path, output_directory: &Path, koi_body: KoiBody) 
     }
 }
 
-/// The day's files, by name, with a caption naming the behavior, observation date, and body.
+/// The day's files, by name, with a caption naming the behavior and observation date.
 struct RenderedDay {
     caption: String,
     output_files: [(&'static str, Vec<u8>); 3],
 }
 
 /// Render and encode the day's files in memory, so none is written unless all succeed.
-fn render_day(snapshot_path: &Path, koi_body: KoiBody) -> Result<RenderedDay, String> {
+fn render_day(snapshot_path: &Path) -> Result<RenderedDay, String> {
     let snapshot_json = fs::read_to_string(snapshot_path)
         .map_err(|read_error| format!("{}: {read_error}", snapshot_path.display()))?;
     let account_snapshot: AccountSnapshot = serde_json::from_str(&snapshot_json)
@@ -147,17 +119,16 @@ fn render_day(snapshot_path: &Path, koi_body: KoiBody) -> Result<RenderedDay, St
         .map_err(|development_error| development_error.to_string())?;
     let behavior = select_behavior(&koi_development);
     let swim_frames: Vec<KoiFrame> = (0..frame_count(behavior))
-        .map(|frame_index| render_swim_frame(&koi_development, koi_body, behavior, frame_index))
+        .map(|frame_index| render_swim_frame(&koi_development, behavior, frame_index))
         .collect();
     let gif_bytes =
         encode_gif(&swim_frames).map_err(|encoding_error| encoding_error.to_string())?;
-    let png_bytes = encode_png(&render_koi(&koi_development, koi_body))
+    let png_bytes = encode_png(&render_koi(&koi_development))
         .map_err(|encoding_error| encoding_error.to_string())?;
     let caption = format!(
-        "{} for {}, {} body",
+        "{} for {}",
         describe_behavior(behavior),
-        koi_development.observed_on,
-        name_body(koi_body)
+        koi_development.observed_on
     );
     let preview_html = encode_preview_html(&caption);
     Ok(RenderedDay {
@@ -168,21 +139,6 @@ fn render_day(snapshot_path: &Path, koi_body: KoiBody) -> Result<RenderedDay, St
             ("preview.html", preview_html.into_bytes()),
         ],
     })
-}
-
-fn parse_body(body_name: &str) -> Option<KoiBody> {
-    BODY_NAMES
-        .iter()
-        .find(|(named_body_name, _)| *named_body_name == body_name)
-        .map(|(_, koi_body)| *koi_body)
-}
-
-fn name_body(koi_body: KoiBody) -> &'static str {
-    BODY_NAMES
-        .iter()
-        .find(|(_, named_body)| *named_body == koi_body)
-        .map(|(body_name, _)| *body_name)
-        .expect("every body has a name")
 }
 
 fn describe_behavior(behavior: Behavior) -> &'static str {
@@ -219,8 +175,7 @@ fn write_snapshot(snapshot_json: &str, output_path: Option<&Path>) -> Result<(),
     replace_file(output_path, snapshot_json.as_bytes())
 }
 
-/// Replace the file through a sibling temporary file named after it, so a failed write
-/// never leaves a partial file in place.
+/// Replace the file through a sibling temporary file, so a failed write leaves no partial file.
 fn replace_file(output_path: &Path, file_bytes: &[u8]) -> Result<(), String> {
     let mut temporary_name = output_path.file_name().unwrap_or_default().to_owned();
     temporary_name.push(".tmp");
