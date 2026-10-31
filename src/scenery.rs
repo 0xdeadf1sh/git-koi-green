@@ -7,7 +7,7 @@ use crate::render::{FRAME_HEIGHT_PIXELS, FRAME_WIDTH_PIXELS, SPRITE_PALETTE, pai
 /// Rows at the bottom of the frame kept for the pebble bed and props; the fish swims above.
 pub(crate) const GROUND_RESERVE_PIXELS: f64 = 48.0;
 
-/// The tank is drawn in square cells this many pixels wide, to match a grown fish's pixels.
+/// The tank is drawn in cells this many pixels on a side, to match a grown fish's pixels.
 const CELL_PIXELS: usize = 2;
 const GRID_WIDTH: usize = FRAME_WIDTH_PIXELS as usize / CELL_PIXELS;
 const GRID_HEIGHT: usize = FRAME_HEIGHT_PIXELS as usize / CELL_PIXELS;
@@ -75,27 +75,33 @@ const SKULL_ROWS: [&str; 21] = [
     "......311111111113......",
 ];
 /// Top-left cells of the ship and the skull, resting in the pebble bed.
-const SHIP_CORNER: [i32; 2] = [1, 89];
-const SKULL_CORNER: [i32; 2] = [102, 105];
+const SHIP_CORNER: [i32; 2] = [3, 57];
+const SKULL_CORNER: [i32; 2] = [229, 73];
 
 /// The cell row the vines grow from, inside the pebble bed.
-const VINE_ROOT_Y: f64 = 123.5;
+const VINE_ROOT_Y: f64 = 91.5;
 /// Each vine's root column, height, and phase offset in radians; lengths are in cells.
-const VINES: [(f64, f64, f64); 7] = [
-    (8.0, 66.0, 0.0),
-    (22.0, 44.0, 1.3),
-    (52.0, 30.0, 2.9),
-    (66.0, 20.0, 4.1),
-    (86.0, 38.0, 0.7),
-    (98.0, 58.0, 2.2),
-    (124.0, 46.0, 3.6),
+const VINES: [(f64, f64, f64); 13] = [
+    (10.0, 58.0, 0.0),
+    (24.0, 40.0, 1.3),
+    (54.0, 28.0, 2.9),
+    (70.0, 46.0, 4.1),
+    (90.0, 22.0, 0.7),
+    (110.0, 52.0, 2.2),
+    (132.0, 30.0, 3.6),
+    (150.0, 44.0, 5.0),
+    (170.0, 24.0, 1.9),
+    (190.0, 54.0, 0.4),
+    (208.0, 34.0, 2.6),
+    (224.0, 50.0, 4.4),
+    (250.0, 40.0, 1.1),
 ];
 /// Sideways sway at the tip of a vine this tall; shorter vines sway less.
 const VINE_SWAY_CELLS_PER_HEIGHT: f64 = 4.0 / 60.0;
 const LEAF_SPACING_CELLS: f64 = 6.0;
 
 /// Pebble rows: center line, half-height range, and the first pebble's number, in cells.
-const PEBBLE_ROWS: [(f64, [f64; 2], u32); 2] = [(121.5, [1.2, 2.0], 0), (125.5, [1.4, 2.2], 1_000)];
+const PEBBLE_ROWS: [(f64, [f64; 2], u32); 2] = [(89.5, [1.2, 2.0], 0), (93.5, [1.4, 2.2], 1_000)];
 
 /// Paint the tank, with the vines at the given point in their sway cycle, in radians.
 pub(crate) fn paint_scenery(sway_phase: f64) -> Vec<[u8; 4]> {

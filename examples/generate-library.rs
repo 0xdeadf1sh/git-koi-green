@@ -18,6 +18,8 @@ const GROWTH_SAMPLES: [u64; 6] = [
     50_000,
     MAX_GROWTH_CONTRIBUTIONS,
 ];
+/// The overviews tile the wide samples two to a row.
+const OVERVIEW_COLUMNS: usize = 2;
 const USAGE: &str = "Usage: generate-library OUTPUT_DIRECTORY
 Write reproducible PNGs, SVGs, and an index; replace matching files, preserve others.
 Success is silent. Errors go to stderr and exit 1; invalid usage exits 2.
@@ -89,7 +91,7 @@ fn generate_library(output_directory: &Path) -> Result<(), Box<dyn Error>> {
 fn build_index_header() -> String {
     let mut index_markdown = format!(
         "# Fish Library\n\n\
-        The still fish at each growth sample below, from left to right in the overviews.\n\n\
+        The still fish at each growth sample below, two to a row in the overviews.\n\n\
         Regenerate with the command in [CONTRIBUTING.md](../CONTRIBUTING.md).\n\n\
         Growth: [light overview](growth-light.png) · [dark overview](growth-dark.png)\n\n\
         Native canvas: {FRAME_WIDTH_PIXELS} × {FRAME_HEIGHT_PIXELS}.\n\n\
@@ -109,8 +111,9 @@ fn encode_overview(
     let overview_scale = STATIC_EXPORT_SCALE as usize;
     let frame_width = FRAME_WIDTH_PIXELS as usize;
     let frame_height = FRAME_HEIGHT_PIXELS as usize;
-    let overview_width = frame_width * rendered_frames.len() * overview_scale;
-    let overview_height = frame_height * overview_scale;
+    let overview_width = frame_width * OVERVIEW_COLUMNS * overview_scale;
+    let overview_height =
+        frame_height * rendered_frames.len().div_ceil(OVERVIEW_COLUMNS) * overview_scale;
     let mut overview_pixels = background_color.repeat(overview_width * overview_height);
     for (pixel_index, pixel_channels) in overview_pixels
         .as_chunks_mut::<4>()
@@ -120,10 +123,12 @@ fn encode_overview(
     {
         let source_x = pixel_index % overview_width / overview_scale;
         let source_y = pixel_index / overview_width / overview_scale;
-        let frame_index = source_x / frame_width;
-        let source_index = (source_y * frame_width + source_x % frame_width) * 4;
-        let source_channels =
-            &rendered_frames[frame_index].as_rgba_bytes()[source_index..source_index + 4];
+        let frame_index = source_y / frame_height * OVERVIEW_COLUMNS + source_x / frame_width;
+        let Some(rendered_frame) = rendered_frames.get(frame_index) else {
+            continue;
+        };
+        let source_index = (source_y % frame_height * frame_width + source_x % frame_width) * 4;
+        let source_channels = &rendered_frame.as_rgba_bytes()[source_index..source_index + 4];
         if source_channels[3] != 0 {
             pixel_channels.copy_from_slice(source_channels);
         }

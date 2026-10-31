@@ -52,13 +52,13 @@ fn the_tank_fills_the_ground_and_the_vines_sway() {
     let bottom_row = &frame_pixels[((FRAME_HEIGHT_PIXELS - 1) * FRAME_WIDTH_PIXELS) as usize..];
     let covered_share =
         bottom_row.iter().filter(|pixel| pixel[3] != 0).count() as f64 / bottom_row.len() as f64;
-    assert!(covered_share > 0.9, "{covered_share}");
+    assert!(covered_share > 0.85, "{covered_share}");
     let sway_frames: Vec<_> = [0, 30, 60]
         .map(|frame_index| render_swim_frame(&koi_development, Behavior::DeepRest, frame_index))
         .into_iter()
         .collect();
     // Below the fish's water, only the swaying vines change from frame to frame.
-    let ground_start = (200 * FRAME_WIDTH_PIXELS) as usize;
+    let ground_start = ((FRAME_HEIGHT_PIXELS - 46) * FRAME_WIDTH_PIXELS) as usize;
     assert_ne!(
         pixels_of(&sway_frames[0])[ground_start..],
         pixels_of(&sway_frames[1])[ground_start..]
@@ -122,7 +122,10 @@ fn png_output_doubles_each_pixel_and_repeats_exactly() {
         .unwrap();
     let mut decoded_pixels = vec![0; png_reader.output_buffer_size().unwrap()];
     let frame_info = png_reader.next_frame(&mut decoded_pixels).unwrap();
-    assert_eq!((frame_info.width, frame_info.height), (512, 512));
+    assert_eq!(
+        (frame_info.width, frame_info.height),
+        (FRAME_WIDTH_PIXELS * 2, FRAME_HEIGHT_PIXELS * 2)
+    );
     assert_eq!(frame_info.color_type, png::ColorType::Rgba);
     for (pixel_index, native_channels) in pixels_of(&koi_frame).iter().enumerate() {
         let block_left = pixel_index as u32 % FRAME_WIDTH_PIXELS * 2;

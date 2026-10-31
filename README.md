@@ -9,7 +9,7 @@ tool runs from the command line, and the Rust library underneath can be used on
 its own.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/0xdeadf1sh/0xdeadf1sh/main/koi/koi.gif" width="256" alt="A fish redrawn every night from the day's activity" />
+  <img src="https://raw.githubusercontent.com/0xdeadf1sh/0xdeadf1sh/main/koi/koi.gif" width="100%" alt="A fish redrawn every night from the day's activity" />
 </p>
 
 <picture>

@@ -6,6 +6,11 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The tank is wide, 512 × 192 native and 1024 × 384 exported, to fill a profile
+  README's width. Cruising laps span the tank; darting laps stay narrower.
+
 ## [2.1.0] - 2026-10-31
 
 ### Added

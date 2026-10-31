@@ -8,9 +8,9 @@ use crate::motion::{Course, STILL_POSE, SwimPose, calculate_swim_pose, frame_cou
 use crate::scenery::{GROUND_RESERVE_PIXELS, calculate_sway_phase, paint_bubble, paint_scenery};
 
 /// Width of the native canvas every fish is drawn on, at every growth level.
-pub const FRAME_WIDTH_PIXELS: u32 = 256;
-/// Height of the native canvas; the canvas is square.
-pub const FRAME_HEIGHT_PIXELS: u32 = FRAME_WIDTH_PIXELS;
+pub const FRAME_WIDTH_PIXELS: u32 = 512;
+/// Height of the native canvas; the wide tank fills a profile README's width.
+pub const FRAME_HEIGHT_PIXELS: u32 = 192;
 
 /// A renderer-owned, fixed-size frame with row-major RGBA pixels.
 #[derive(Debug, Eq, PartialEq)]
@@ -34,10 +34,10 @@ impl KoiFrame {
 /// Render the fish in a fixed pose in the still tank, sized by its contribution total.
 pub fn render_koi(koi_development: &KoiDevelopment) -> KoiFrame {
     let fish_scale = calculate_fish_scale(koi_development.total_contributions);
-    let fish_pixels = render_fish_layer(fish_scale, &STILL_POSE, [1.0; 2]);
+    let fish_pixels = render_fish_layer(fish_scale, &STILL_POSE, &STILL_FIT);
     let mut rgba_pixels = compose_over_scenery(&fish_pixels, 0.0);
     let mouth = locate_mouth(
-        &place_fish(&STILL_POSE, fish_scale, [1.0; 2]),
+        &place_fish(&STILL_POSE, fish_scale, &STILL_FIT),
         &STILL_POSE,
         fish_scale,
     );
@@ -57,8 +57,8 @@ pub fn render_swim_frame(
     const BUBBLE_LIFE_FRAMES: u32 = 150;
     let fish_scale = calculate_fish_scale(koi_development.total_contributions);
     let swim_pose = calculate_swim_pose(behavior, frame_index);
-    let drift_scales = fit_hover_drift(behavior, fish_scale);
-    let fish_pixels = render_fish_layer(fish_scale, &swim_pose, drift_scales);
+    let loop_fit = fit_loop(behavior, fish_scale);
+    let fish_pixels = render_fish_layer(fish_scale, &swim_pose, &loop_fit);
     let loop_frame_count = frame_count(behavior);
     let loop_frame = frame_index % loop_frame_count;
     let mut rgba_pixels = compose_over_scenery(
@@ -68,7 +68,7 @@ pub fn render_swim_frame(
     for spawn_frame in (0..loop_frame_count).step_by(SPAWN_EVERY_FRAMES as usize) {
         let spawn_pose = calculate_swim_pose(behavior, spawn_frame);
         let spawn_mouth = locate_mouth(
-            &place_fish(&spawn_pose, fish_scale, drift_scales),
+            &place_fish(&spawn_pose, fish_scale, &loop_fit),
             &spawn_pose,
             fish_scale,
         );
@@ -174,7 +174,9 @@ const SWAY_CELLS: f64 = 4.0;
 const MIN_TURN_WIDTH: f64 = 0.2;
 /// The lap circle is seen from slightly above, so it flattens to this height share.
 const LAP_HEIGHT_SHARE: f64 = 0.3;
-const MAX_LAP_RADIUS_PIXELS: f64 = 96.0;
+const MAX_LAP_RADIUS_PIXELS: f64 = 200.0;
+/// Darting laps twice as often, so its laps are narrower to keep each step readable.
+const DART_LAP_SHARE: f64 = 0.55;
 /// Room for the outline, a clear pixel at the frame edge, and rounding.
 const FIT_MARGIN_PIXELS: f64 = 2.5;
 
@@ -218,6 +220,30 @@ fn measure_half_extents(fish_scale: f64) -> [f64; 2] {
     ]
 }
 
+/// How one behavior's loop is fitted into the tank.
+struct LoopFit {
+    /// Per axis, the share of the hover drift that keeps every frame inside.
+    drift_scales: [f64; 2],
+    /// Share of the widest lap that fits.
+    lap_share: f64,
+}
+
+const STILL_FIT: LoopFit = LoopFit {
+    drift_scales: [1.0; 2],
+    lap_share: 1.0,
+};
+
+fn fit_loop(behavior: Behavior, fish_scale: f64) -> LoopFit {
+    LoopFit {
+        drift_scales: fit_hover_drift(behavior, fish_scale),
+        lap_share: if behavior == Behavior::Dart {
+            DART_LAP_SHARE
+        } else {
+            1.0
+        },
+    }
+}
+
 /// Per axis, the share of the loop's drift that keeps every hovering frame inside.
 fn fit_hover_drift(behavior: Behavior, fish_scale: f64) -> [f64; 2] {
     let half_extents = measure_half_extents(fish_scale);
@@ -255,18 +281,20 @@ fn calculate_lap_radii(fish_scale: f64) -> [f64; 2] {
     [radius_x, radius_y]
 }
 
-fn place_fish(swim_pose: &SwimPose, fish_scale: f64, drift_scales: [f64; 2]) -> Placement {
+fn place_fish(swim_pose: &SwimPose, fish_scale: f64, loop_fit: &LoopFit) -> Placement {
     match swim_pose.course {
         Course::Hover {
             heading_offset_radians,
             drift_pixels,
         } => Placement {
-            center: [0, 1].map(|axis_index| drift_pixels[axis_index] * drift_scales[axis_index]),
+            center: [0, 1]
+                .map(|axis_index| drift_pixels[axis_index] * loop_fit.drift_scales[axis_index]),
             facing_scale: 1.0,
             tilt: heading_offset_radians.tan(),
         },
         Course::Lap { angle_radians } => {
-            let [radius_x, radius_y] = calculate_lap_radii(fish_scale);
+            let [radius_x, radius_y] =
+                calculate_lap_radii(fish_scale).map(|radius| radius * loop_fit.lap_share);
             // The clockwise heading's horizontal share; positive is rightward.
             let heading_x = -angle_radians.sin();
             Placement {
@@ -361,12 +389,8 @@ fn paint_rising_bubble(
 }
 
 /// The fish alone, outlined, with any feeding extras and depth tint, on a clear canvas.
-fn render_fish_layer(
-    fish_scale: f64,
-    swim_pose: &SwimPose,
-    drift_scales: [f64; 2],
-) -> Vec<[u8; 4]> {
-    let placement = place_fish(swim_pose, fish_scale, drift_scales);
+fn render_fish_layer(fish_scale: f64, swim_pose: &SwimPose, loop_fit: &LoopFit) -> Vec<[u8; 4]> {
+    let placement = place_fish(swim_pose, fish_scale, loop_fit);
     let mut rgba_pixels = Vec::with_capacity((FRAME_WIDTH_PIXELS * FRAME_HEIGHT_PIXELS) as usize);
     for pixel_y in 0..FRAME_HEIGHT_PIXELS {
         for pixel_x in 0..FRAME_WIDTH_PIXELS {
@@ -641,7 +665,7 @@ mod tests {
         render_fish_layer(
             fish_scale,
             &calculate_swim_pose(behavior, frame),
-            fit_hover_drift(behavior, fish_scale),
+            &fit_loop(behavior, fish_scale),
         )
     }
 
@@ -702,7 +726,7 @@ mod tests {
                 let fish_pixels = render_fish_layer(
                     calculate_fish_scale(total_contributions),
                     &STILL_POSE,
-                    [1.0; 2],
+                    &STILL_FIT,
                 );
                 let bounds = measure_bounds(&fish_pixels);
                 assert!(is_inside_water(bounds), "{total_contributions}: {bounds:?}");
@@ -738,7 +762,7 @@ mod tests {
             measure_centroid(fish_pixels)[0] - (bounds[0] + bounds[2]) as f64 / 2.0
         };
         let half_loop = frame_count(Behavior::Cruise) / 2;
-        assert!(head_side(&render_fish_layer(1.5, &STILL_POSE, [1.0; 2])) < 0.0);
+        assert!(head_side(&render_fish_layer(1.5, &STILL_POSE, &STILL_FIT)) < 0.0);
         assert!(head_side(&render_swimming_fish(12_750, Behavior::Cruise, 0)) > 0.0);
         assert!(head_side(&render_swimming_fish(12_750, Behavior::Cruise, half_loop)) < 0.0);
     }
@@ -768,13 +792,13 @@ mod tests {
             let frames: Vec<_> = (0..=frame_count(behavior))
                 .map(|frame| render_swimming_fish(1_500, behavior, frame))
                 .collect();
-            // Darting bursts are fast by design; every other behavior moves gently.
+            // Darting bursts are fast by design; wide cruise laps peak near ten pixels a frame.
             if behavior != Behavior::Dart {
                 for pair in frames.windows(2) {
                     let [before, after] =
                         [&pair[0], &pair[1]].map(|pixels| measure_centroid(pixels));
                     let step = (after[0] - before[0]).hypot(after[1] - before[1]);
-                    assert!(step < 8.0, "{behavior:?} jumps {step}");
+                    assert!(step < 12.0, "{behavior:?} jumps {step}");
                 }
             }
             let counts: Vec<usize> = frames
