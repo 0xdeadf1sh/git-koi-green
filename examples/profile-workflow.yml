@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: yalongwastaken/git-koi@v1
+      - uses: 0xdeadf1sh/git-koi-green@v2
         with:
           output-dir: koi
       - name: Commit the koi if it changed

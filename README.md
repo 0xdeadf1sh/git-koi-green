@@ -3,11 +3,11 @@
 Git koi draws a pixel-art green fish from a GitHub account's public activity.
 Its contributions grow it, and the day that just ended decides how it swims. A
 nightly workflow puts the fish on a profile README as a looping GIF, the same
-tool runs from the command line, and the Rust library underneath is published on
-crates.io.
+tool runs from the command line, and the Rust library underneath can be used on
+its own.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/yalongwastaken/yalongwastaken/main/koi/koi.gif" width="256" alt="The author's koi, redrawn every night from the day's activity" />
+  <img src="https://raw.githubusercontent.com/0xdeadf1sh/0xdeadf1sh/main/koi/koi.gif" width="256" alt="A fish redrawn every night from the day's activity" />
 </p>
 
 <picture>
@@ -34,7 +34,7 @@ crates.io.
 - For a koi on your profile README: a GitHub account. The Action runs in your
   profile repository's workflow with its built-in token.
 - For the command line: a binary from the
-  [releases page](https://github.com/yalongwastaken/git-koi/releases), or Rust
+  [releases page](https://github.com/0xdeadf1sh/git-koi-green/releases), or Rust
   at or above the `rust-version` in [Cargo.toml](Cargo.toml), plus the
   [GitHub CLI](https://cli.github.com), authenticated.
 - For the library: Rust at or above that same version.

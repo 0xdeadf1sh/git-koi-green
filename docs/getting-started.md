@@ -38,7 +38,7 @@ when it changed, so an unchanged koi adds no commit.
 
 If you change `output-dir`, change the commit step's path and the README image
 to match. The example uses
-`yalongwastaken/git-koi@v1`, which moves to each compatible release; pin a full
+`0xdeadf1sh/git-koi-green@v2`, which moves to each compatible release; pin a full
 release tag to choose when you update.
 
 GitHub pauses scheduled workflows in a public repository after 60 days without
@@ -52,11 +52,11 @@ Install one of two ways. With Rust at or above the `rust-version` in
 [Cargo.toml](../Cargo.toml):
 
 ```sh
-cargo install git-koi --locked
+cargo install --git https://github.com/0xdeadf1sh/git-koi-green --locked
 ```
 
 Or download the archive for your platform from the
-[releases page](https://github.com/yalongwastaken/git-koi/releases), a `.tar.gz`
+[releases page](https://github.com/0xdeadf1sh/git-koi-green/releases), a `.tar.gz`
 for Linux and macOS or a `.zip` for Windows. Each archive has a `.sha256` file
 beside it; check the download with `shasum -a 256 -c` on macOS, `sha256sum -c`
 on Linux, or `certutil -hashfile` on Windows, then put `git-koi` on your `PATH`.

@@ -6,6 +6,8 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-31
+
 ### Changed
 
 - The koi is replaced by a side-view green fish drawn from a fixed sprite. It
@@ -38,6 +40,7 @@ follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `git-koi` library: account history, koi development, behavior, motion,
   markings, rendering, and encoding.
 
-[Unreleased]: https://github.com/yalongwastaken/git-koi/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/0xdeadf1sh/git-koi-green/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/0xdeadf1sh/git-koi-green/releases/tag/v2.0.0
 [1.0.1]: https://github.com/yalongwastaken/git-koi/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/yalongwastaken/git-koi/releases/tag/v1.0.0
